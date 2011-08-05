@@ -11,7 +11,7 @@
 > Wir sind die Roboter.
 >
 > Wir sind auf Alles programmiert.  
-> Und was du willst wird ausgefuehrt.
+> Und was du willst wird ausgeführt.
 > 
 > - Die Roboter by Kraftwerk
 
