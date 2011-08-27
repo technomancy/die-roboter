@@ -30,7 +30,8 @@
                                 (:exchange-durable config true)
                                 (:exchange-auto-delete config false))
        (wabbit/queue-declare (:queue config "die.roboter.work")
-                             (:durable config true))
+                             (:durable config true)
+                             (:exclusive config false))
        (wabbit/queue-bind (:queue config "die.roboter.work")
                           (:exchange config "die.roboter")
                           (:queue config "die.roboter.work"))
@@ -121,16 +122,11 @@
                   (*exception-handler* e msg)))))))
   ([] (work {:implicit true})))
 
-(def pid (-> (ManagementFactory/getRuntimeMXBean) .getName (.split "@") first))
-
-(def broadcast-queue-name
-  (format "die.roboter.broadcast.%s.%s"
-          (.getHostName (java.net.InetAddress/getLocalHost)) pid))
-
 (defn work-on-broadcast
   "Wait for work on the broadcast queue and eval it continually."
   ([config]
-     (work (merge {:exchange "die.roboter.broadcast"
-                   :exchange-type "fanout"
-                   :queue broadcast-queue-name} config)))
+     (work (merge {:exchange "die.roboter.broadcast", :exchange-type "fanout"
+                   :exclusive true
+                   :queue (str "die.roboter.broadcast." (UUID/randomUUID))}
+                  config)))
   ([] (work-on-broadcast {:implicit true})))
