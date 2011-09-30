@@ -2,8 +2,7 @@
   "The Robots get your work done in an straightforward way."
   (:refer-clojure :exclude [future send-off])
   (:require [com.mefesto.wabbitmq :as wabbit]
-            [clojure.tools.logging :as log]
-            [leiningen.util.ns :as ns]) ; TODO: use clojure.tools.namespace
+            [clojure.tools.logging :as log])
   (:import (java.util UUID)
            (java.util.concurrent Executors TimeUnit TimeoutException)
            (java.lang.management ManagementFactory)))
