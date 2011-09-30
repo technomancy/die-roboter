@@ -71,11 +71,10 @@ use the `with-robots` macro to bind it dynamically.
 
 ## Todo
 
+* Expose future exceptions to caller (issue #2)
 * Test timeout functionality
-* Fix race condition in broadcast tests
 * Control worker count via queue
 * Retry limit
-* Expose future exceptions to caller (issue #2)
 * progress-reporting-copy
 
 ## License

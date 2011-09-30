@@ -64,6 +64,7 @@
     (let [worker (clojure.core/future
                   (binding [bound 1]
                     (work-on-broadcast)))]
+      (Thread/sleep 100)
       (try (broadcast `(swap! state assoc bound true))
            (finally (.cancel worker true)))))
   (is (= {1 true} @state)))
@@ -76,6 +77,7 @@
           worker2 (clojure.core/future
                    (binding [bound 2]
                      (work-on-broadcast {:queue "worker2"})))]
+      (Thread/sleep 100)
       (try (broadcast `(swap! state assoc bound true))
            (finally (.cancel worker1 true)
                     (.cancel worker2 true)))))
