@@ -71,11 +71,11 @@ use the `with-robots` macro to bind it dynamically.
 
 ## Todo
 
+* fix progress-reporting-copy
 * Expose future exceptions to caller (issue #2)
 * Test timeout functionality
 * Control worker count via queue
 * Retry limit
-* progress-reporting-copy
 
 ## License
 

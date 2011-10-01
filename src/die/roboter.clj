@@ -2,10 +2,12 @@
   "The Robots get your work done in an straightforward way."
   (:refer-clojure :exclude [future send-off])
   (:require [com.mefesto.wabbitmq :as wabbit]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [clojure.java.io :as io])
   (:import (java.util UUID)
            (java.util.concurrent Executors TimeUnit TimeoutException)
-           (java.lang.management ManagementFactory)))
+           (java.lang.management ManagementFactory)
+           (java.io FilterInputStream)))
 
 (def ^{:doc "Namespace in which robots work." :private true} context
   (binding [*ns* (create-ns 'die.roboter.context)] (refer-clojure) *ns*))
@@ -129,3 +131,20 @@
                    :queue (str "die.roboter.broadcast." (UUID/randomUUID))}
                   config)))
   ([] (work-on-broadcast {:implicit true})))
+
+(defn- progressive-input [input]
+  ;; TODO: this fails without the erronous hint
+  (let [ins (io/input-stream ^java.io.File input)]
+    (proxy [FilterInputStream] [ins]
+      (read [bytes]
+        (report-progress)
+        (.read ins bytes))
+      (close []
+        (.close ins)
+        (proxy-super close)))))
+
+(defn copy
+  "Copy between input and output using clojure.java.io/copy, but reporting
+   progress every so often. Use to prevent long IO operations from timing out."
+  [input output & opts]
+  (apply io/copy (progressive-input input) output opts))

@@ -3,8 +3,9 @@
   (:use [die.roboter]
         [clojure.test])
   (:require [com.mefesto.wabbitmq :as wabbit]
-            [clojure.tools.logging :as log])
-  (:import (java.util.concurrent TimeUnit)))
+            [clojure.tools.logging :as log]
+            [clojure.java.io :as io])
+  (:import (java.util.concurrent TimeUnit TimeoutException)))
 
 (.setLevel (java.util.logging.Logger/getLogger "die.roboter")
            java.util.logging.Level/ALL) ; TODO: no-op
@@ -30,7 +31,7 @@
 
 (defn wait-for [blockers]
   (try (.get (clojure.core/future (doseq [b blockers] @b)) 1 TimeUnit/SECONDS)
-       (catch java.util.concurrent.TimeoutException _
+       (catch TimeoutException _
          (is false "Timed out!"))))
 
 (defmacro with-block [n body]
@@ -82,3 +83,26 @@
            (finally (.cancel worker1 true)
                     (.cancel worker2 true)))))
   (is (= {1 true 2 true} @state)))
+
+(defn ack-handler [e msg]
+  (com.mefesto.wabbitmq/ack (-> msg :envelope :delivery-tag)))
+
+(deftest test-timeout-normal-copy
+  (let [worker (clojure.core/future
+                (binding [*exception-handler* ack-handler]
+                  (work {:timeout 100})))]
+     (try
+       (send-off `(do (io/copy (io/file "/etc/hosts") (io/file "/dev/null"))
+                      (swap! state assoc :ran true)))
+       (finally (.cancel worker true)))
+     (is (not (:ran @state)))))
+
+(deftest test-progressive-copy
+  (let [worker (clojure.core/future
+                (binding [*exception-handler* ack-handler]
+                  (work {:timeout 100})))]
+     (try
+       (send-off `(do (copy (io/file "/etc/hosts") (io/file "/dev/null"))
+                      (swap! state assoc :ran true)))
+       (finally (.cancel worker true)))
+     (is (:ran @state))))
