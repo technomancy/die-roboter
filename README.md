@@ -21,20 +21,22 @@ The Robots get your work done in an straightforward way.
 
 ## Usage
 
-    (ns die.roboter.example
-      (:require [die.roboter :as roboter]))
-    
-    ;; starting up
-    (roboter/work) ; on the worker nodes (this will block)
-    
-    ;; ordering around
-    (roboter/send-off `(println "Boing, Boom Tschak.")) ; returns immediately
+```clj
+(ns die.roboter.example
+  (:require [die.roboter :as roboter]))
 
-    (roboter/broadcast `(println "Greetings all Programs!")) ; runs on all nodes
+;; starting up
+(roboter/work) ; on the worker nodes (this will block)
 
-    (let [f (roboter/future
-              (slurp "/etc/hosts"))]
-      (println @f)) ; when you need a return value back
+;; ordering around
+(roboter/send-off `(println "Boing, Boom Tschak.")) ; returns immediately
+
+(roboter/broadcast `(println "Greetings all Programs!")) ; runs on all nodes
+
+(let [f (roboter/future
+          (slurp "/etc/hosts"))]
+  (println @f)) ; when you need a return value back
+```
 
 Jobs will not ack to the server until they've completed successfully,
 so workers that throw exceptions or disappear entirely will have their
@@ -43,13 +45,15 @@ using `clojure.tools.logging/warn`, but you can rebind
 `*exception-handler*` to respond in your own way, including acking the
 message back to the server:
 
-    (defn handle-tachyon [e msg]
-      (if (re-find #"tachyon" (.getMessage e)) ; tachyon failures don't get retried
-        (com.mefesto.wabbitmq/ack (-> msg :envelope :delivery-tag))
-        (println "Oh, we got trouble!" (.getMessage e))))
+```clj
+(defn handle-tachyon [e msg]
+  (if (re-find #"tachyon" (.getMessage e)) ; tachyon failures don't get retried
+    (com.mefesto.wabbitmq/ack (-> msg :envelope :delivery-tag))
+    (println "Oh, we got trouble!" (.getMessage e))))
 
-    (binding [roboter/*exception-handler* handle-tachyon]
-      (roboter/work))
+(binding [roboter/*exception-handler* handle-tachyon]
+  (roboter/work))
+```
 
 By default each job has five minutes to complete before it is
 considered hung and are killed, returning its work to the queue. The
@@ -63,11 +67,13 @@ popular choice. Most functions take an optional `config` argument that
 can be used to specify the AMQP connection settings, but you can also
 use the `with-robots` macro to bind it dynamically.
 
-    (roboter/broadcast '(println "Greetings, programs") {:host "10.1.12.99"})
+```clj
+(roboter/broadcast '(println "Greetings, programs") {:host "10.1.12.99"})
 
-    (roboter/with-robots {:username "flynn" :password "reindeerflotilla"}
-      (roboter/broadcast `(println "Started working on" ~hostname))
-      (roboter/work))
+(roboter/with-robots {:username "flynn" :password "reindeerflotilla"}
+  (roboter/broadcast `(println "Started working on" ~hostname))
+  (roboter/work))
+```
 
 ## Todo
 
