@@ -3,7 +3,8 @@
   (:refer-clojure :exclude [future send-off])
   (:require [com.mefesto.wabbitmq :as wabbit]
             [clojure.tools.logging :as log]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.walk :as walk])
   (:import (java.util UUID)
            (java.util.concurrent Executors TimeUnit TimeoutException)
            (java.lang.management ManagementFactory)
@@ -148,3 +149,22 @@
    progress every so often. Use to prevent long IO operations from timing out."
   [input output & opts]
   (apply io/copy (progressive-input input) output opts))
+
+(def workers (atom ()))
+
+(defn add-worker
+  "Spin up a worker with the given options."
+  [opts]
+  (swap! workers conj (clojure.core/future (work opts))))
+
+(defn stop-worker
+  "Cancel the most recently-created worker."
+  []
+  (swap! workers (fn [[worker & others]]
+                   (future-cancel worker)
+                   others)))
+
+(defn -main [& {:as opts}]
+  (let [opts (into {:workers (Integer. (or (System/getenv "WORKER_COUNT") 4))}
+                   (walk/keywordize-keys opts))]
+    (dotimes [n (opts :workers)] (add-worker opts))))

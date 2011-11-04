@@ -57,7 +57,7 @@ message back to the server:
 
 By default each job has five minutes to complete before it is
 considered hung and are killed, returning its work to the queue. The
-timeout can be overridden by rebinding `die.roboter/\*timeout\*` or
+timeout can be overridden by rebinding `die.roboter/*timeout*` or
 passing in a `:timeout` config key to the `work` function. You can
 also avoid timing out by calling the `die.roboter/report-progress`
 function, which resets the timer back to the start.
@@ -80,8 +80,6 @@ use the `with-robots` macro to bind it dynamically.
 * fix progress-reporting-copy
 * Expose future exceptions to caller (issue #2)
 * Test timeout functionality
-* Control worker count via queue
-* Retry limit
 
 ## License
 
