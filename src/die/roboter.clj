@@ -8,7 +8,9 @@
   (:import (java.util UUID)
            (java.util.concurrent Executors TimeUnit TimeoutException)
            (java.lang.management ManagementFactory)
-           (java.io FilterInputStream)))
+           (java.io FilterInputStream ObjectInputStream ObjectOutputStream
+                    ByteArrayInputStream ByteArrayOutputStream)
+           (org.apache.commons.codec.binary Base64)))
 
 (def ^{:doc "Namespace in which robots work." :private true} context
   (binding [*ns* (create-ns 'die.roboter.context)] (refer-clojure) *ns*))
@@ -73,6 +75,15 @@
                             :exchange-type "fanout"
                             :key "die.roboter.broadcast"} config))))
 
+(defn- serialize-64 [x]
+  (let [baos (ByteArrayOutputStream.)]
+    (.writeObject (ObjectOutputStream. baos) x)
+    (String. (.encode (Base64.) (.toByteArray baos)))))
+
+(defn throw-form [e]
+  `(throw (-> (.decode (Base64.) ~(serialize-64 e))
+              ByteArrayInputStream. ObjectInputStream. .readObject)))
+
 (defmacro future
   "Run body on a robot node and return a result upon deref."
   [& body]
@@ -81,9 +92,12 @@
       (with-robots (merge {:implict true} *config*)
         (wabbit/queue-declare reply-queue# false true true)
         (send-off (list `wabbit/publish reply-queue#
-                        '(.getBytes (pr-str (do ~@body)))))
+                        '(.getBytes (pr-str (try ~@body
+                                                 (catch Exception e#
+                                                   (throw-form e#)))))))
         (wabbit/with-queue reply-queue#
-          (-> (wabbit/consuming-seq true) first :body String. read-string))))))
+          (-> (wabbit/consuming-seq true) first :body String.
+              read-string eval))))))
 
 (defn- success? [f timeout]
   (try (.get f timeout TimeUnit/MILLISECONDS) true

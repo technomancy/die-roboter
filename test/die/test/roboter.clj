@@ -5,7 +5,8 @@
   (:require [com.mefesto.wabbitmq :as wabbit]
             [clojure.tools.logging :as log]
             [clojure.java.io :as io])
-  (:import (java.util.concurrent TimeUnit TimeoutException)))
+  (:import (java.util.concurrent TimeUnit TimeoutException ExecutionException)
+           (java.io IOException)))
 
 (.setLevel (java.util.logging.Logger/getLogger "die.roboter")
            java.util.logging.Level/ALL) ; TODO: no-op
@@ -97,12 +98,22 @@
        (finally (.cancel worker true)))
      (is (not (:ran @state)))))
 
-(deftest test-progressive-copy
+;; (deftest test-progressive-copy
+;;   (let [worker (clojure.core/future
+;;                 (binding [*exception-handler* ack-handler]
+;;                   (work {:timeout 100})))]
+;;      (try
+;;        (send-off `(do (copy (io/file "/etc/hosts") (io/file "/dev/null"))
+;;                       (swap! state assoc :ran true)))
+;;        (finally (.cancel worker true)))
+;;      (is (:ran @state))))
+
+(deftest test-exception-over-future
   (let [worker (clojure.core/future
                 (binding [*exception-handler* ack-handler]
                   (work {:timeout 100})))]
-     (try
-       (send-off `(do (copy (io/file "/etc/hosts") (io/file "/dev/null"))
-                      (swap! state assoc :ran true)))
-       (finally (.cancel worker true)))
-     (is (:ran @state))))
+    (try
+      (is (thrown? IOException (try @(future (throw (java.io.IOException.)))
+                                    (catch ExecutionException e
+                                      (throw (-> e .getCause .getCause))))))
+      (finally (.cancel worker true)))))
