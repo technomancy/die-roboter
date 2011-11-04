@@ -40,10 +40,13 @@ The Robots get your work done in an straightforward way.
 
 Jobs will not ack to the server until they've completed successfully,
 so workers that throw exceptions or disappear entirely will have their
-jobs automatically retried. By default failed jobs will simply log
-using `clojure.tools.logging/warn`, but you can rebind
-`*exception-handler*` to respond in your own way, including acking the
-message back to the server:
+jobs automatically retried.
+
+Exceptions occurring in `future` calls will be propagated back to the
+caller and thrown upon deref. When using `send-off` by default failed
+jobs will simply log using `clojure.tools.logging/warn`, but you can
+rebind `*exception-handler*` to respond in your own way, including
+acking the message back to the server:
 
 ```clj
 (defn handle-tachyon [e msg]
@@ -74,12 +77,6 @@ use the `with-robots` macro to bind it dynamically.
   (roboter/broadcast `(println "Started working on" ~hostname))
   (roboter/work))
 ```
-
-## Todo
-
-* fix progress-reporting-copy
-* Expose future exceptions to caller (issue #2)
-* Test timeout functionality
 
 ## License
 
