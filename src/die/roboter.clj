@@ -101,7 +101,6 @@
 
 (defn- success? [f timeout]
   (try (.get f timeout TimeUnit/MILLISECONDS) true
-       ;; TODO: get stack trace if there's an exception inside the future
        (catch TimeoutException _)))
 
 (defn- supervise [f progress timeout]
@@ -123,7 +122,7 @@
 (defn- consume [{:keys [body envelope] :as msg} timeout]
   (binding [*ns* context,*current-message* msg]
     (log/trace "Robot received message:" (String. body))
-    (run-with-timeout timeout eval (read-string (String. body))))
+    @(run-with-timeout timeout eval (read-string (String. body))))
   (wabbit/ack (:delivery-tag envelope)))
 
 (defn work

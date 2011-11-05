@@ -68,27 +68,29 @@
     (is (= 1 (.get (future 1) 100 TimeUnit/MILLISECONDS)))))
 
 (deftest test-simple-broadcast
-  (with-block 1
-    (let [worker (clojure.core/future
+  (let [worker (clojure.core/future
                   (binding [bound 1]
                     (work-on-broadcast)))]
       (Thread/sleep 100)
-      (try (broadcast `(swap! state assoc bound true))
-           (finally (future-cancel worker)))))
+      (try
+        (with-block 1
+          (broadcast `(swap! state assoc bound true)))
+           (finally (future-cancel worker))))
   (is (= {1 true} @state)))
 
 (deftest test-multiple-broadcast
-  (with-block 2
-    (let [worker1 (clojure.core/future
+  (let [worker1 (clojure.core/future
                    (binding [bound 1]
                      (work-on-broadcast {:queue "worker1"})))
           worker2 (clojure.core/future
                    (binding [bound 2]
                      (work-on-broadcast {:queue "worker2"})))]
       (Thread/sleep 100)
-      (try (broadcast `(swap! state assoc bound true))
-           (finally (future-cancel worker1)
-                    (future-cancel worker2)))))
+      (try
+        (with-block 2
+          (broadcast `(swap! state assoc bound true)))
+        (finally (future-cancel worker1)
+                 (future-cancel worker2))))
   (is (= {1 true 2 true} @state)))
 
 (deftest test-timeout-normal-copy

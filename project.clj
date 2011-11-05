@@ -5,5 +5,4 @@
                  [com.mefesto/wabbitmq "0.1.4"
                   :exclusions [org.clojure/clojure-contrib]]
                  [org.clojure/tools.logging "0.2.0"]]
-  :checksum-deps true
-  :local-repo-classpath true)
+  :checksum-deps true)
