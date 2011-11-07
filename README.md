@@ -33,8 +33,7 @@ The Robots get your work done in an straightforward way.
 
 (roboter/broadcast `(println "Greetings all Programs!")) ; runs on all nodes
 
-(let [f (roboter/future
-          (slurp "/etc/hosts"))]
+(let [f (roboter/send-back `(slurp "/etc/hosts"))]
   (println @f)) ; when you need a return value back
 ```
 
@@ -42,7 +41,7 @@ Jobs will not ack to the server until they've completed successfully,
 so workers that throw exceptions or disappear entirely will have their
 jobs automatically retried.
 
-Exceptions occurring in `future` calls will be propagated back to the
+Exceptions occurring in `send-back` calls will be propagated back to the
 caller and thrown upon deref. When using `send-off` by default failed
 jobs will simply log using `clojure.tools.logging/warn`, but you can
 rebind `*exception-handler*` to respond in your own way, including

@@ -1,5 +1,5 @@
 (ns die.test.roboter
-  (:refer-clojure :exclude [future send-off])
+  (:refer-clojure :exclude [send-off])
   (:use [die.roboter]
         [clojure.test])
   (:require [com.mefesto.wabbitmq :as wabbit]
@@ -31,12 +31,12 @@
   (f))
 
 (defmacro with-worker [& body]
-  `(let [worker# (clojure.core/future (work))]
+  `(let [worker# (future (work))]
      (try ~@body
           (finally (future-cancel worker#)))))
 
 (defn wait-for [blockers]
-  (try (.get (clojure.core/future (doseq [b blockers] @b)) 1 TimeUnit/SECONDS)
+  (try (.get (future (doseq [b blockers] @b)) 1 TimeUnit/SECONDS)
        (catch TimeoutException _
          (when (not *timeout-expected*)
            (is false "Timed out!")))))
@@ -63,66 +63,67 @@
       (send-off `(swap! state assoc :ran true))))
   (is (:ran @state)))
 
-(deftest test-future
+(deftest test-send-back
   (with-worker
-    (is (= 1 (.get (future 1) 100 TimeUnit/MILLISECONDS)))))
+    (is (= 1 (.get (send-back 1) 100 TimeUnit/MILLISECONDS)))
+    (is (= 2 (.get (send-back `(+ 1 1)) 100 TimeUnit/MILLISECONDS)))))
 
 (deftest test-simple-broadcast
-  (let [worker (clojure.core/future
-                  (binding [bound 1]
-                    (work-on-broadcast)))]
-      (Thread/sleep 100)
-      (try
-        (with-block 1
-          (broadcast `(swap! state assoc bound true)))
-           (finally (future-cancel worker))))
+  (let [worker (future
+                 (binding [bound 1]
+                   (work-on-broadcast)))]
+    (Thread/sleep 100)
+    (try
+      (with-block 1
+        (broadcast `(swap! state assoc bound true)))
+      (finally (future-cancel worker))))
   (is (= {1 true} @state)))
 
 (deftest test-multiple-broadcast
-  (let [worker1 (clojure.core/future
-                   (binding [bound 1]
-                     (work-on-broadcast {:queue "worker1"})))
-          worker2 (clojure.core/future
-                   (binding [bound 2]
-                     (work-on-broadcast {:queue "worker2"})))]
-      (Thread/sleep 100)
-      (try
-        (with-block 2
-          (broadcast `(swap! state assoc bound true)))
-        (finally (future-cancel worker1)
-                 (future-cancel worker2))))
+  (let [worker1 (future
+                  (binding [bound 1]
+                    (work-on-broadcast {:queue "worker1"})))
+        worker2 (future
+                  (binding [bound 2]
+                    (work-on-broadcast {:queue "worker2"})))]
+    (Thread/sleep 100)
+    (try
+      (with-block 2
+        (broadcast `(swap! state assoc bound true)))
+      (finally (future-cancel worker1)
+               (future-cancel worker2))))
   (is (= {1 true 2 true} @state)))
 
 (deftest test-timeout-normal-copy
-  (let [worker (clojure.core/future
-                (binding [*exception-handler* ack-handler]
-                  (work {:timeout 100})))]
+  (let [worker (future
+                 (binding [*exception-handler* ack-handler]
+                   (work {:timeout 100})))]
     (try
       (binding [*timeout-expected* true]
         (with-block 1
           (send-off `(do (io/copy (io/file "/etc/hosts") (io/file "/dev/null"))
                          (Thread/sleep 2000)
                          (swap! state assoc :ran true)))))
-       (finally (future-cancel worker)))
-     (is (not (:ran @state)))))
+      (finally (future-cancel worker)))
+    (is (not (:ran @state)))))
 
 (deftest test-progressive-copy
-  (let [worker (clojure.core/future
-                (binding [*exception-handler* ack-handler]
-                  (work {:timeout 100})))]
+  (let [worker (future
+                 (binding [*exception-handler* ack-handler]
+                   (work {:timeout 100})))]
     (try
       (with-block 1
         (send-off `(do (copy (io/file "/etc/hosts") (io/file "/tmp/hosts"))
                        (swap! state assoc :ran true))))
-       (finally (future-cancel worker)))
-     (is (:ran @state))))
+      (finally (future-cancel worker)))
+    (is (:ran @state))))
 
-(deftest test-exception-over-future
-  (let [worker (clojure.core/future
-                (binding [*exception-handler* ack-handler]
-                  (work {:timeout 100})))]
-    (try
-      (is (instance? IOException (try @(future (throw (java.io.IOException.)))
-                                      (catch ExecutionException e
-                                        (-> e .getCause .getCause)))))
-      (finally (future-cancel worker)))))
+;; (deftest test-exception-over-future
+;;   (let [worker (future
+;;                  (binding [*exception-handler* ack-handler]
+;;                    (work {:timeout 100})))]
+;;     (try
+;;       (is (instance? IOException (try @(send-back '(throw (java.io.IOException.)))
+;;                                       (catch ExecutionException e
+;;                                         (-> e .getCause .getCause)))))
+;;       (finally (future-cancel worker)))))

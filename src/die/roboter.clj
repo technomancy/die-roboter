@@ -1,6 +1,6 @@
 (ns die.roboter
   "The Robots get your work done in an straightforward way."
-  (:refer-clojure :exclude [future send-off])
+  (:refer-clojure :exclude [send-off])
   (:require [com.mefesto.wabbitmq :as wabbit]
             [clojure.tools.logging :as log]
             [clojure.java.io :as io]
@@ -81,23 +81,26 @@
     (String. (.encode (Base64.) (.toByteArray baos)))))
 
 (defn throw-form [e]
-  `(throw (-> (.decode (Base64.) ~(serialize-64 e))
-              ByteArrayInputStream. ObjectInputStream. .readObject)))
+  `(-> (.decode (Base64.) ~(serialize-64 e))
+       ByteArrayInputStream. ObjectInputStream. .readObject))
 
-(defmacro future
-  "Run body on a robot node and return a result upon deref."
-  [& body]
-  `(let [reply-queue# (format "die.roboter.reply.%s" (UUID/randomUUID))]
-     (clojure.core/future
-      (with-robots (merge {:implict true} *config*)
-        (wabbit/queue-declare reply-queue# false true true)
-        (send-off (list `wabbit/publish reply-queue#
-                        '(.getBytes (pr-str (try ~@body
-                                                 (catch Exception e#
-                                                   (throw-form e#)))))))
-        (wabbit/with-queue reply-queue#
-          (-> (wabbit/consuming-seq true) first :body String.
-              read-string eval))))))
+(defn send-back
+  ([form] (send-back form {}))
+  ([form config]
+     (let [reply-queue (format "die.roboter.reply.%s" (UUID/randomUUID))]
+       (clojure.core/future
+        (with-robots (merge {:implict true} config)
+          (wabbit/queue-declare reply-queue false true true)
+          (send-off (list `wabbit/publish reply-queue
+                          `(.getBytes (pr-str (try ~form
+                                                   (catch Exception e#
+                                                     (throw-form e#)))))))
+          (wabbit/with-queue reply-queue
+            (-> (wabbit/consuming-seq true) first :body
+                ;; TODO: detect exception forms and eval them; side-channel needed
+                ;; 3-arg version of publish lets you set properties?
+                String. read-string ;; eval
+                )))))))
 
 (defn- success? [f timeout]
   (try (.get f timeout TimeUnit/MILLISECONDS) true
@@ -180,4 +183,5 @@
 (defn -main [& {:as opts}]
   (let [opts (into {:workers (Integer. (or (System/getenv "WORKER_COUNT") 4))}
                    (walk/keywordize-keys opts))]
-    (dotimes [n (opts :workers)] (add-worker opts))))
+    (println "Starting" (:workers opts) "workers.")
+    (dotimes [n (:workers opts)] (add-worker opts))))
