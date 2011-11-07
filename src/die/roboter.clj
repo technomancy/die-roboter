@@ -81,8 +81,14 @@
     (String. (.encode (Base64.) (.toByteArray baos)))))
 
 (defn throw-form [e]
-  `(-> (.decode (Base64.) ~(serialize-64 e))
-       ByteArrayInputStream. ObjectInputStream. .readObject))
+  `(do ::eval (-> (.decode (Base64.) ~(serialize-64 e))
+                  ByteArrayInputStream. ObjectInputStream. .readObject throw)))
+
+(defn read-or-eval [{:keys [body props]}]
+  (let [value (-> body String. read-string)]
+    (if (and (coll? value) (= (second value) ::eval))
+      (eval value)
+      value)))
 
 (defn send-back
   ([form] (send-back form {}))
@@ -96,11 +102,7 @@
                                                    (catch Exception e#
                                                      (throw-form e#)))))))
           (wabbit/with-queue reply-queue
-            (-> (wabbit/consuming-seq true) first :body
-                ;; TODO: detect exception forms and eval them; side-channel needed
-                ;; 3-arg version of publish lets you set properties?
-                String. read-string ;; eval
-                )))))))
+            (-> (wabbit/consuming-seq true) first read-or-eval)))))))
 
 (defn- success? [f timeout]
   (try (.get f timeout TimeUnit/MILLISECONDS) true
@@ -181,7 +183,7 @@
                    others)))
 
 (defn -main [& {:as opts}]
-  (let [opts (into {:workers (Integer. (or (System/getenv "WORKER_COUNT") 4))}
+  (let [opts (into {:workers (or (System/getenv "WORKER_COUNT") 4)}
                    (walk/keywordize-keys opts))]
     (println "Starting" (:workers opts) "workers.")
-    (dotimes [n (:workers opts)] (add-worker opts))))
+    (dotimes [n (Integer. (:workers opts))] (add-worker opts))))

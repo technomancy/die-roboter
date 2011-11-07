@@ -68,6 +68,7 @@
     (is (= 1 (.get (send-back 1) 100 TimeUnit/MILLISECONDS)))
     (is (= 2 (.get (send-back `(+ 1 1)) 100 TimeUnit/MILLISECONDS)))))
 
+;; TODO: still too much nondeterminism here.
 (deftest test-simple-broadcast
   (let [worker (future
                  (binding [bound 1]
@@ -118,12 +119,15 @@
       (finally (future-cancel worker)))
     (is (:ran @state))))
 
-;; (deftest test-exception-over-future
-;;   (let [worker (future
-;;                  (binding [*exception-handler* ack-handler]
-;;                    (work {:timeout 100})))]
-;;     (try
-;;       (is (instance? IOException (try @(send-back '(throw (java.io.IOException.)))
-;;                                       (catch ExecutionException e
-;;                                         (-> e .getCause .getCause)))))
-;;       (finally (future-cancel worker)))))
+(deftest test-exception-over-future
+  (let [worker (future
+                 (binding [*exception-handler* ack-handler]
+                   (work {:timeout 100})))]
+    (try
+      (is (instance? IOException (try @(send-back '(throw (java.io.IOException.)))
+                                      (catch ExecutionException e
+                                        (-> e .getCause .getCause)))))
+      #_(prn (try @(send-back '(throw (java.io.IOException.)))
+                (catch ExecutionException e
+                  e)))
+      (finally (future-cancel worker)))))
