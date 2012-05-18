@@ -6,6 +6,7 @@
             [clojure.java.io :as io]
             [clojure.walk :as walk])
   (:import (java.util UUID)
+           (java.net URI)
            (java.util.concurrent Executors TimeUnit TimeoutException)
            (java.lang.management ManagementFactory)
            (java.io FilterInputStream ObjectInputStream ObjectOutputStream
@@ -46,12 +47,20 @@
 
 (def ^{:dynamic true} *config* nil)
 
+(defn ^{:internal true} parse-url [{url :url :as config}]
+  (if-let [{:keys [host userInfo path port]} (and url (bean (URI. url)))]
+    (let [[user pass] (.split userInfo ":")
+          port (if (pos? port) port (:port config))]
+      (assoc config :username user :password pass
+             :host host :port port :vhost path))
+    config))
+
 (defmacro with-robots [config & body]
   ;; :implicit should only start a new connection if there's none active.
   `(if (or (and *config* (:implicit ~config))
            (= *config* ~config)) ; avoid redundant nesting
      (do ~@body)
-     (binding [*config* ~config]
+     (binding [*config* (parse-url ~config)]
        (wabbit/with-broker ~config
          (wabbit/with-channel ~config
            (init ~config)
@@ -183,7 +192,8 @@
                    others)))
 
 (defn -main [& {:as opts}]
-  (let [opts (into {:workers (or (System/getenv "WORKER_COUNT") 4)}
+  (let [opts (into {:workers (or (System/getenv "WORKER_COUNT") 4)
+                    :url (System/getenv "RABBITMQ_URL")}
                    (walk/keywordize-keys opts))]
     (println "Starting" (:workers opts) "workers.")
     (dotimes [n (Integer. (:workers opts))] (add-worker opts))))

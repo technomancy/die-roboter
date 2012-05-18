@@ -131,3 +131,9 @@
                 (catch ExecutionException e
                   e)))
       (finally (future-cancel worker)))))
+
+(deftest test-parse-uri
+  (is (= {:vhost "/vhost", :port 12,
+          :host "cloud.com", :password "pass", :username "user",}
+         (dissoc (parse-uri {:uri "amqp://user:pass@cloud.com:12/vhost"})
+                 :uri))))
