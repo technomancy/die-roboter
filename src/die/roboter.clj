@@ -196,4 +196,6 @@
                     :url (System/getenv "RABBITMQ_URL")}
                    (walk/keywordize-keys opts))]
     (println "Starting" (:workers opts) "workers.")
+    (when (:require opts)
+      (require (symbol (:require opts))))
     (dotimes [n (Integer. (:workers opts))] (add-worker opts))))
