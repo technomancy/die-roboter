@@ -198,4 +198,5 @@
     (println "Starting" (:workers opts) "workers.")
     (when (:require opts)
       (require (symbol (:require opts))))
-    (dotimes [n (Integer. (:workers opts))] (add-worker opts))))
+    (dotimes [n (Integer. (:workers opts))] (add-worker opts))
+    (doseq [w @workers] @w)))
