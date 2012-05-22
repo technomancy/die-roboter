@@ -11,7 +11,8 @@
            (java.lang.management ManagementFactory)
            (java.io FilterInputStream ObjectInputStream ObjectOutputStream
                     ByteArrayInputStream ByteArrayOutputStream)
-           (org.apache.commons.codec.binary Base64)))
+           (org.apache.commons.codec.binary Base64)
+           (org.apache.log4j Level LogManager)))
 
 (def ^{:doc "Namespace in which robots work." :private true} context
   (binding [*ns* (create-ns 'die.roboter.context)] (refer-clojure) *ns*))
@@ -193,9 +194,12 @@
 
 (defn -main [& {:as opts}]
   (let [opts (into {:workers (or (System/getenv "WORKER_COUNT") 4)
-                    :url (System/getenv "RABBITMQ_URL")}
+                    :url (System/getenv "RABBITMQ_URL")
+                    :log-level (or (System/getenv "LOG_LEVEL") "info")}
                    (walk/keywordize-keys opts))]
     (println "Starting" (:workers opts) "workers.")
+    (.setLevel (LogManager/getLogger "die.roboter")
+               (Level/toLevel (.toUpperCase (:log-level opts))))
     (when (:require opts)
       (require (symbol (:require opts))))
     (dotimes [n (Integer. (:workers opts))] (add-worker opts))
