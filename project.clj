@@ -6,5 +6,5 @@
                  [com.mefesto/wabbitmq "0.2.1"
                   :exclusions [org.clojure/clojure-contrib]]
                  [org.clojure/tools.logging "0.2.0"]
-                 [log4j "1.2.9"]]
+                 [log4j "1.2.16"]]
   :checksum-deps true)
