@@ -31,8 +31,6 @@ The Robots get your work done in an straightforward way.
 ;; ordering around
 (roboter/send-off `(println "Boing, Boom Tschak.")) ; returns immediately
 
-(roboter/broadcast `(println "Greetings all Programs!")) ; runs on all nodes
-
 (let [f (roboter/send-back `(slurp "/etc/hosts"))]
   (println @f)) ; when you need a return value back
 ```
@@ -70,10 +68,10 @@ can be used to specify the AMQP connection settings, but you can also
 use the `with-robots` macro to bind it dynamically.
 
 ```clj
-(roboter/broadcast '(println "Greetings, programs") {:host "10.1.12.99"})
+(roboter/send-off '(println "Greetings, programs") {:host "10.1.12.99"})
 
 (roboter/with-robots {:username "flynn" :password "reindeerflotilla"}
-  (roboter/broadcast `(println "Started working on" ~hostname))
+  (roboter/send-off `(println "Started working on" ~hostname))
   (roboter/work))
 ```
 
