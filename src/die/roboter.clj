@@ -59,52 +59,6 @@
            (wabbit/with-exchange (:exchange ~config)
              ~@body))))))
 
-(defn send-off
-  "Execute a form on a robot node."
-  ([form] (send-off form {}))
-  ([form config]
-     (with-robots (merge {:implicit true} config)
-       (log/trace "Published" (pr-str form) (:key config "die.roboter.work"))
-       (wabbit/publish (:key config "die.roboter.work")
-                       (.getBytes (pr-str form))))))
-
-(defn broadcast
-  "Like send-off, but the form runs on all robot nodes."
-  ([form] (broadcast form {}))
-  ([form config]
-     (send-off form (merge {:exchange "die.roboter.broadcast"
-                            :exchange-type "fanout"
-                            :key "die.roboter.broadcast"} config))))
-
-(defn- serialize-64 [x]
-  (let [baos (ByteArrayOutputStream.)]
-    (.writeObject (ObjectOutputStream. baos) x)
-    (String. (.encode (Base64.) (.toByteArray baos)))))
-
-(defn throw-form [e]
-  `(do ::eval (-> (.decode (Base64.) ~(serialize-64 e))
-                  ByteArrayInputStream. ObjectInputStream. .readObject throw)))
-
-(defn read-or-eval [{:keys [body props]}]
-  (let [value (-> body String. read-string)]
-    (if (and (coll? value) (= (second value) ::eval))
-      (eval value)
-      value)))
-
-(defn send-back
-  ([form] (send-back form {}))
-  ([form config]
-     (let [reply-queue (format "die.roboter.reply.%s" (UUID/randomUUID))]
-       (clojure.core/future
-        (with-robots (merge {:implict true} config)
-          (wabbit/queue-declare reply-queue false true true)
-          (send-off (list `wabbit/publish reply-queue
-                          `(.getBytes (pr-str (try ~form
-                                                   (catch Exception e#
-                                                     (throw-form e#)))))))
-          (wabbit/with-queue reply-queue
-            (-> (wabbit/consuming-seq true) first read-or-eval)))))))
-
 (defn- success? [f timeout]
   (try (.get f timeout TimeUnit/MILLISECONDS) true
        (catch TimeoutException _)))
@@ -152,6 +106,72 @@
                   config)))
   ([] (work-on-broadcast {:implicit true})))
 
+(defn send-off
+  "Execute a form on a robot node."
+  ([form] (send-off form {}))
+  ([form config]
+     (with-robots (merge {:implicit true} config)
+       (log/trace "Published" (pr-str form) (:key config "die.roboter.work"))
+       (wabbit/publish (:key config "die.roboter.work")
+                       (.getBytes (pr-str form))))))
+
+(defn broadcast
+  "Like send-off, but the form runs on all robot nodes."
+  ([form] (broadcast form {}))
+  ([form config]
+     (send-off form (merge {:exchange "die.roboter.broadcast"
+                            :exchange-type "fanout"
+                            :key "die.roboter.broadcast"} config))))
+
+;; Each send-back call places a promise in the responses map and
+;; queues up a form that sends back a form that delivers the evaluated
+;; response to the given promise.
+(defonce ^{:internal true} responses (atom {}))
+
+(defn- deserialize-if-needed [value]
+  (if (and (coll? value) (= ::base64 (first value)))
+    (-> (.decode (Base64.) (second value))
+        ByteArrayInputStream. ObjectInputStream. .readObject)
+    value))
+
+(defn deliver-response [responses id value]
+  (when-let [p (responses id)]
+    (deliver p (deserialize-if-needed value)))
+  (dissoc responses id))
+
+(defonce response-queue (str "die.roboter.response." (UUID/randomUUID)))
+
+(def deliverer
+  (Thread. #(work {:queue response-queue})))
+
+;; This is kinda lame; probably better to use j.io.Serializable
+;; outright and ditch the reader?
+(defn serialize-64 [x]
+  (let [baos (ByteArrayOutputStream.)]
+    (.writeObject (ObjectOutputStream. baos) x)
+    [::base64 (String. (.encode (Base64.) (.toByteArray baos)))]))
+
+(defn- send-back-form [id form]
+  (list `wabbit/publish response-queue
+        (list '.getBytes
+              (list 'pr-str
+                    `(list 'swap! `responses `deliver-response
+                           ~id (try ~form
+                                    (catch Exception e#
+                                      (serialize-64 e#))))))))
+
+(defn send-back
+  ([form] (send-back form {}))
+  ([form config]
+     (let [id (str (UUID/randomUUID)), response (promise)]
+       (swap! responses assoc id response)
+       (with-robots (merge {:implict true} config)
+         ;; (wabbit/queue-declare response-queue)
+         (send-off (send-back-form id form))
+         (when-not (.isAlive deliverer)
+           (.start deliverer))
+         response))))
+
 (defn- progressive-input [input]
   ;; TODO: this fails without the erronous hint
   (let [ins (io/input-stream ^java.io.File input)]
@@ -185,7 +205,11 @@
 
 (defn -main [& {:as opts}]
   (let [opts (into {:workers (or (System/getenv "WORKER_COUNT") 4)
-                    :log-level (or (System/getenv "LOG_LEVEL") "info")}
+                    :log-level (or (System/getenv "LOG_LEVEL") "info")
+                    ;; workaround for https://github.com/mefesto/wabbitmq/pull/7
+                    :virtual-host (if-let [uri (System/getenv "RABBITMQ_URL")]
+                                    (->> (.getPath (java.net.URI. uri))
+                                         (re-find #"/?(.*)") (second)))}
                    (walk/keywordize-keys opts))]
     (println "Starting" (:workers opts) "workers.")
     (.setLevel (LogManager/getLogger "die.roboter")

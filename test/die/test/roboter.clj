@@ -6,7 +6,12 @@
             [clojure.tools.logging :as log]
             [clojure.java.io :as io])
   (:import (java.util.concurrent TimeUnit TimeoutException ExecutionException)
-           (java.io IOException)))
+           (java.io IOException)
+           (org.apache.log4j Level LogManager)))
+
+(when-let [level (System/getenv "LOG_LEVEL")]
+  (.setLevel (LogManager/getLogger "die.roboter")
+             (Level/toLevel (.toUpperCase level))))
 
 (def ^{:dynamic true} *timeout-expected* false)
 
@@ -17,13 +22,14 @@
 (defn ack-handler [e msg]
   (com.mefesto.wabbitmq/ack (-> msg :envelope :delivery-tag)))
 
-(defn clear-queues! [queue-name]
+(defn clear-queues! [& queues]
   (with-robots {}
-    (wabbit/with-queue queue-name
-      (doall (take 100 (wabbit/consuming-seq true 1))))))
+    (doseq [queue queues]
+      (wabbit/with-queue queue
+        (doall (take 100 (wabbit/consuming-seq true 1)))))))
 
 (defn work-fixture [f]
-  (clear-queues! "die.roboter.work")
+  (clear-queues! "die.roboter.work" "die.roboter.response")
   (reset! state {})
   (f))
 
@@ -62,8 +68,9 @@
 
 (deftest test-send-back
   (with-worker
-    (is (= 1 (.get (send-back 1) 100 TimeUnit/MILLISECONDS)))
-    (is (= 2 (.get (send-back `(+ 1 1)) 100 TimeUnit/MILLISECONDS)))))
+    (Thread/sleep 50) ; allow the workers to spin up
+    (is (= 1 (deref (send-back 1) 100 :timeout)))
+    (is (= 2 (deref (send-back `(+ 1 1)) 100 :timeout)))))
 
 ;; TODO: still too much nondeterminism here.
 ;; (deftest ^:broadcast test-simple-broadcast
@@ -121,7 +128,7 @@
                  (binding [*exception-handler* ack-handler]
                    (work {:timeout 100})))]
     (try
-      (is (instance? IOException (try @(send-back '(throw (java.io.IOException.)))
-                                      (catch ExecutionException e
-                                        (-> e .getCause)))))
+      (is (instance? IOException
+                     (deref (send-back '(throw (java.io.IOException.)))
+                            100 :timeout)))
       (finally (future-cancel worker)))))
