@@ -217,4 +217,4 @@
     (when (:require opts)
       (require (symbol (:require opts))))
     (dotimes [n (Integer. (:workers opts))] (add-worker opts))
-    (doseq [w @workers] @w)))
+    (work-on-broadcast opts)))
