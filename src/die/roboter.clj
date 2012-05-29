@@ -113,7 +113,9 @@
      (with-robots (merge {:implicit true} config)
        (log/trace "Published" (pr-str form) (:key config "die.roboter.work"))
        (wabbit/publish (:key config "die.roboter.work")
-                       (.getBytes (pr-str form))))))
+                       (.getBytes (if (string? form)
+                                    form
+                                    (pr-str form)))))))
 
 (defn broadcast
   "Like send-off, but the form runs on all robot nodes."
@@ -151,26 +153,22 @@
     (.writeObject (ObjectOutputStream. baos) x)
     [::base64 (String. (.encode (Base64.) (.toByteArray baos)))]))
 
+;; TODO: using strings for now since nesting unquote is hard.
 (defn- send-back-form [id form]
-  (list `wabbit/publish response-queue
-        (list '.getBytes
-              (list 'pr-str
-                    `(list 'swap! `responses `deliver-response
-                           ~id (try ~form
-                                    (catch Exception e#
-                                      (serialize-64 e#))))))))
+  (format (str "(com.mefesto.wabbitmq/publish \"%s\" (.getBytes (pr-str `(swap!"
+               " die.roboter/responses die.roboter/deliver-response \"%s\" "
+               "(try ~%s (catch Exception e# (die.roboter/serialize-64 e#)))))))")
+          response-queue id (pr-str form)))
 
 (defn send-back
   ([form] (send-back form {}))
   ([form config]
      (let [id (str (UUID/randomUUID)), response (promise)]
        (swap! responses assoc id response)
-       (with-robots (merge {:implict true} config)
-         ;; (wabbit/queue-declare response-queue)
-         (send-off (send-back-form id form))
-         (when-not (.isAlive deliverer)
-           (.start deliverer))
-         response))))
+       (send-off (send-back-form id form) (merge {:implict true} config))
+       (when-not (.isAlive (deliverer config))
+         (.start (deliverer config)))
+       response)))
 
 (defn- progressive-input [input]
   ;; TODO: this fails without the erronous hint
