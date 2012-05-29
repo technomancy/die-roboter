@@ -216,7 +216,8 @@
                     ;; workaround for https://github.com/mefesto/wabbitmq/pull/7
                     :virtual-host (if-let [uri (System/getenv "RABBITMQ_URL")]
                                     (->> (.getPath (java.net.URI. uri))
-                                         (re-find #"/?(.*)") (second)))}
+                                         (re-find #"/?(.*)") (second))
+                                    "/")}
                    (walk/keywordize-keys opts))]
     (println "Starting" (:workers opts) "workers.")
     (.setLevel (LogManager/getLogger "die.roboter")
