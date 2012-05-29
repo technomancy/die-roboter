@@ -148,8 +148,10 @@
     (doto (Thread. #(with-robots config
                       (wabbit/queue-declare response-queue true)
                       (wabbit/with-queue response-queue
-                        (doseq [response (wabbit/consuming-seq true)]
-                          (try (eval (read-string (String. (:body response))))
+                        (doseq [response (wabbit/consuming-seq true)
+                                :let [form (String. (:body response))]]
+                          (log/trace "Deliverer received " form)
+                          (try (eval (read-string form))
                                (catch Exception e
                                  (log/warn "Problem delivering response" e)))))))
       .start)))
