@@ -25,7 +25,7 @@
 
 (def ^{:doc "How long before jobs that don't report progress are killed, in ms."
        :dynamic true} *timeout*
-  (* 1000 60 5)) ; five minutes
+       (* 1000 60 5)) ; five minutes
 
 (defn ^{:dynamic true :doc "Reset job timeout."} report-progress [])
 
@@ -143,8 +143,18 @@
 
 (defonce response-queue (str "die.roboter.response." (UUID/randomUUID)))
 
-(def deliverer
-  (Thread. #(work {:queue response-queue})))
+(defonce start-deliverer
+  (fn [config]
+    (doto (Thread. #(with-robots config
+                      (wabbit/queue-declare response-queue true)
+                      (wabbit/with-queue response-queue
+                        (doseq [response (wabbit/consuming-seq true)]
+                          (try (eval (read-string (String. (:body response))))
+                               (catch Exception e
+                                 (log/warn "Problem delivering response" e)))))))
+      .start)))
+
+(alter-var-root #'start-deliverer memoize)
 
 ;; This is kinda lame; probably better to use j.io.Serializable
 ;; outright and ditch the reader?
@@ -164,10 +174,9 @@
   ([form] (send-back form {}))
   ([form config]
      (let [id (str (UUID/randomUUID)), response (promise)]
+       (start-deliverer config) ; memoized
        (swap! responses assoc id response)
        (send-off (send-back-form id form) (merge {:implict true} config))
-       (when-not (.isAlive (deliverer config))
-         (.start (deliverer config)))
        response)))
 
 (defn- progressive-input [input]
